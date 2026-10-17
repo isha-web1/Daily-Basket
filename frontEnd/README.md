@@ -1,75 +1,92 @@
-# React + TypeScript + Vite
+# Daily Basket
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### Fresh groceries, a smoother way to shop.
 
-Currently, two official plugins are available:
+Daily Basket is a responsive grocery storefront built with React and TypeScript. Browse everyday essentials, discover deals, manage a shopping cart, and explore checkout and order pages through a clean, produce-inspired interface.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+![Daily Basket storefront screenshot](src/assets/screenshot.png)
 
-## React Compiler
+## What you can do
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Browse products by category, search the catalog, and explore flash deals.
+- View product details, ratings, and related shopping information.
+- Add products to a cart, adjust quantities, and keep the cart saved in local storage.
+- Use the checkout, delivery address, order history, and order tracking screens.
+- Explore an admin dashboard overview.
+- Navigate a responsive interface styled with Tailwind CSS.
 
-## Expanding the ESLint configuration
+> **Demo note:** This frontend currently uses sample catalog and order data. Checkout and account-related screens demonstrate the shopping flow; connect an API and authentication service to make them persistent and production-ready.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Built with
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+| Area | Tools |
+| --- | --- |
+| UI | React 19, TypeScript |
+| Development and build | Vite |
+| Styling | Tailwind CSS 4 |
+| Navigation | React Router |
+| Icons and notifications | Lucide React, React Hot Toast |
+| Maps | Leaflet, React Leaflet |
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Get started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Requirements
 
+- Node.js and npm
+
+### Run locally
+
+From this `frontEnd` directory:
+
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Open the local URL printed by Vite in your terminal.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Available scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the Vite development server. |
+| `npm run build` | Type-check and build the production app into `dist/`. |
+| `npm run preview` | Preview the production build locally. |
+| `npm run lint` | Run ESLint. |
 
+## Main routes
+
+| Route | Page |
+| --- | --- |
+| `/` | Home and featured products |
+| `/products` | Product catalog |
+| `/products/:id` | Product details |
+| `/search` | Search results |
+| `/deals` | Flash deals |
+| `/login` | Login screen |
+| `/checkout` | Checkout |
+| `/orders` | Order history |
+| `/orders/:id` | Order tracking |
+| `/addresses` | Saved delivery addresses |
+| `/admin` | Admin dashboard |
+
+## Project layout
+
+```text
+src/
+├── assets/       # Product imagery, sample data, and storefront screenshot
+├── components/   # Shared UI components and route helpers
+├── context/      # Shopping cart state and persistence
+├── pages/        # Store, checkout, order, and admin screens
+├── types/        # Shared TypeScript types
+└── utils/        # Formatting helpers
 ```
+
+## Production build
+
+```bash
+npm run build
+npm run preview
+```
+
+The production-ready files are generated in `dist/`.

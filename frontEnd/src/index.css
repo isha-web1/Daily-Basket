@@ -1,23 +1,31 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=DM+Serif+Display:ital@0;1&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=DM+Serif+Display:ital@0;1&family=Inter:wght@400..700&display=swap");
 @import "tailwindcss";
 
 @theme {
     --color-app-green: #1b3022;
+    --color-app-green-dark: #032e15;
     --color-app-green-light: #2d4a35;
     --color-app-green-lighter: #3d6b4a;
+    --color-app-green-muted: #006045;
     --color-app-orange: #f97316;
     --color-app-orange-dark: #ea580c;
+    --color-app-orange-light: #ffedd4;
     --color-app-cream: #faf7f2;
     --color-app-cream-dark: #f0ebe3;
     --color-app-text: #1b3022;
     --color-app-text-light: #6b7280;
+    --color-app-text-muted: #52525c;
+    --color-app-text-faint: #71717b;
     --color-app-border: #e5e7eb;
     --color-app-success: #22c55e;
+    --color-app-success-dark: #008236;
+    --color-app-success-light: #dcfce7;
     --color-app-error: #ef4444;
     --color-app-warning: #f59e0b;
 
     --font-sans: "Outfit", sans-serif;
     --font-serif: "DM Serif Display", serif;
+    --font-mono-data: "Inter", sans-serif;
 }
 
 body {

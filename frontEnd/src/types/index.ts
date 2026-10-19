@@ -4,7 +4,7 @@ export interface User {
     email: string;
     phone: string;
     avatar: string;
-    addresses: Address[];
+    addresses?: Address[];
     isAdmin?: boolean;
     createdAt: string;
     updatedAt: string;
@@ -51,6 +51,7 @@ export interface CartItem {
 }
 
 export interface OrderItem {
+    _id: string;
     product: string;
     name: string;
     image: string;

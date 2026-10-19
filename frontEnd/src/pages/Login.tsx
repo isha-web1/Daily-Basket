@@ -7,24 +7,60 @@ import {
   UserIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { heroSectionData } from "../assets/assets";
+import { useAuth } from "../context/useAuth";
 
 export default function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, loading: authLoading, login, register } = useAuth();
   const [isLoginState, setLoginState] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const redirectTo =
+    typeof location.state === "object" &&
+    location.state &&
+    "from" in location.state &&
+    typeof location.state.from === "string"
+      ? location.state.from
+      : "/";
 
   const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 1000);
+    setError("");
+
+    try {
+      if (isLoginState) {
+        await login(email, password);
+        toast.success("Welcome back!");
+      } else {
+        await register(name, email, password);
+        toast.success("Account created successfully!");
+      }
+      navigate(redirectTo, { replace: true });
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Unable to complete your request. Please try again.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (!authLoading && user) {
+    return <Navigate to={redirectTo} replace />;
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -36,7 +72,7 @@ export default function Login() {
         />
         <div className="relative px-12 text-center">
           <h2 className="mb-4 text-4xl font-semibold text-white">
-            Welcome Back To InstantMart
+            Welcome Back To Daily Basket
           </h2>
           <p className="mx-auto max-w-sm font-serif text-xl text-white/60">
             Fresh groceries and organic produce, delivered to your doorstep
@@ -49,7 +85,7 @@ export default function Login() {
           <div className="mb-8 text-center">
             <Link to="/" className="mb-6 inline-flex items-center gap-2">
               <ShoppingCartPlus className="size-8 text-app-green" />
-              <span className="text-2xl font-semibold">InstantMart</span>
+              <span className="text-2xl font-semibold">Daily Basket</span>
             </Link>
 
             <h1 className="mb-2 text-2xl font-semibold text-app-green">
@@ -64,13 +100,25 @@ export default function Login() {
                 : "Already have an account"}
               <button
                 type="button"
-                onClick={() => setLoginState(!isLoginState)}
+                onClick={() => {
+                  setLoginState(!isLoginState);
+                  setError("");
+                }}
                 className="ml-1 font-semibold text-orange-500 hover:text-orange-600"
               >
                 {isLoginState ? "Create one" : "Sign in"}
               </button>
             </p>
           </div>
+
+          {error && (
+            <p
+              role="alert"
+              className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
+              {error}
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLoginState && (

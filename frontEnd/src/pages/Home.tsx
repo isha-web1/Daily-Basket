@@ -1,5 +1,5 @@
 import { ArrowRight, Leaf, Mail } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import ProductCard from "../components/ProductCard";
@@ -7,12 +7,46 @@ import {
   appPromoBannerData,
   assets,
   categoriesData,
-  dummyProducts,
   heroSectionData,
 } from "../assets/assets";
+import { fetchProducts } from "../lib/api";
+import type { Product } from "../types";
 
 export default function Home() {
   const [email, setEmail] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    setLoading(true);
+    setError("");
+
+    fetchProducts({ limit: 8, sort: "rating" }, controller.signal)
+      .then((data) => {
+        if (active) setProducts(data.products);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          return;
+        }
+        setError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load products.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [reloadKey]);
 
   function handleSubscribe(event: FormEvent) {
     event.preventDefault();
@@ -123,11 +157,34 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-          {dummyProducts.slice(0, 8).map((product) => (
-            <ProductCard key={product._id} product={product} />
-          ))}
-        </div>
+        {error ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+            <p className="text-sm text-red-700">{error}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-3 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-app-green shadow-sm"
+            >
+              Try again
+            </button>
+          </div>
+        ) : loading ? (
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="h-72 animate-pulse rounded-2xl bg-white/70" />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <p className="rounded-2xl border border-app-border bg-white p-10 text-center text-sm text-app-text-light">
+            No products are available right now.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {products.map((product) => (
+              <ProductCard key={product._id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mx-auto max-w-[1320px] px-4 pb-8">

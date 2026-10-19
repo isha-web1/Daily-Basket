@@ -1,21 +1,53 @@
 import { Calendar, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { dummyDashboardOrdersData, statusColors } from "../assets/assets";
+import { statusColors } from "../assets/assets";
+import { fetchOrders } from "../lib/api";
+import type { Order } from "../types";
 import { formatOrderDate, formatPrice } from "../utils/format";
 
 const filters = ["All Orders", "Placed", "Out for Delivery", "Delivered"] as const;
 
 export default function MyOrders() {
   const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("All Orders");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const orders = useMemo(
-    () =>
-      activeFilter === "All Orders"
-        ? dummyDashboardOrdersData
-        : dummyDashboardOrdersData.filter((order) => order.status === activeFilter),
-    [activeFilter],
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    fetchOrders(
+      {
+        limit: 100,
+        status: activeFilter === "All Orders" ? undefined : activeFilter,
+      },
+      controller.signal,
+    )
+      .then((data) => {
+        if (active) setOrders(data.orders);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          return;
+        }
+        setError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load your orders.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeFilter, reloadKey]);
 
   return (
     <div className="mx-auto w-full max-w-[1280px] px-8 py-8">
@@ -38,7 +70,24 @@ export default function MyOrders() {
         ))}
       </div>
 
-      {orders.length === 0 ? (
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+          <p className="text-sm text-red-700">{error}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="mt-3 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-app-green shadow-sm"
+          >
+            Try again
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-36 animate-pulse rounded-2xl bg-white/70" />
+          ))}
+        </div>
+      ) : orders.length === 0 ? (
         <p className="rounded-2xl border border-app-border bg-white p-10 text-center text-sm text-app-text-light">
           No orders found.
         </p>

@@ -1,8 +1,9 @@
 import { Banknote, Check, CreditCard, MapPin, ShoppingBag } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { dummyAddressData } from "../assets/assets";
+import { api, fetchAddresses } from "../lib/api";
+import type { Address, Order } from "../types";
 import { useCart } from "../context/useCart";
 import { formatPrice } from "../utils/format";
 
@@ -10,23 +11,76 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
 
-  const [selectedAddress, setSelectedAddress] = useState(
-    dummyAddressData.find((address) => address.isDefault)?._id ?? dummyAddressData[0]?._id,
-  );
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(true);
+  const [addressError, setAddressError] = useState("");
+  const [selectedAddress, setSelectedAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [placing, setPlacing] = useState(false);
+  const [orderError, setOrderError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    fetchAddresses(controller.signal)
+      .then((data) => {
+        if (!active) return;
+        setAddresses(data);
+        const preferred = data.find((address) => address.isDefault) ?? data[0];
+        setSelectedAddress(preferred?._id ?? "");
+      })
+      .catch((fetchError: unknown) => {
+        if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          return;
+        }
+        setAddressError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load your addresses.",
+        );
+      })
+      .finally(() => {
+        if (active) setAddressesLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   const deliveryFee = subtotal >= 20 ? 0 : 5;
   const tax = useMemo(() => subtotal * 0.08, [subtotal]);
   const total = subtotal + deliveryFee + tax;
 
-  function handlePlaceOrder() {
+  async function handlePlaceOrder() {
     if (!selectedAddress) {
       toast.error("Please select a delivery address");
       return;
     }
-    toast.success("Order placed successfully!");
-    clearCart();
-    navigate("/orders");
+
+    setPlacing(true);
+    setOrderError("");
+
+    try {
+      const data = await api.post<{ order: Order }>("/orders", {
+        items: items.map(({ product, quantity }) => ({
+          productId: product._id,
+          quantity,
+        })),
+        addressId: selectedAddress,
+        paymentMethod,
+      });
+      toast.success("Order placed successfully!");
+      clearCart();
+      navigate(`/orders/${data.order._id}`);
+    } catch (placeError) {
+      const message =
+        placeError instanceof Error ? placeError.message : "Unable to place your order.";
+      setOrderError(message);
+      toast.error(message);
+    } finally {
+      setPlacing(false);
+    }
   }
 
   if (items.length === 0) {
@@ -57,33 +111,55 @@ export default function Checkout() {
               Delivery Address
             </h2>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {dummyAddressData.map((address) => {
-                const isSelected = selectedAddress === address._id;
-                return (
-                  <button
-                    key={address._id}
-                    type="button"
-                    onClick={() => setSelectedAddress(address._id)}
-                    className={`relative rounded-xl border p-4 text-left transition ${
-                      isSelected
-                        ? "border-app-green bg-app-cream"
-                        : "border-app-border hover:border-app-green/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-app-green">{address.label}</span>
-                      {isSelected && <Check className="size-4 text-app-green" />}
-                    </div>
-                    <p className="mt-1 text-sm leading-5 text-app-text-light">
-                      {address.address}
-                      <br />
-                      {address.city} {address.state} {address.zip}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+            {addressesLoading ? (
+              <p className="rounded-xl bg-app-cream p-4 text-sm text-app-text-light">
+                Loading your saved addresses...
+              </p>
+            ) : addressError ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {addressError}
+              </p>
+            ) : addresses.length === 0 ? (
+              <div className="rounded-xl border border-app-border bg-app-cream p-5">
+                <p className="text-sm text-app-text-light">
+                  You do not have a delivery address yet.
+                </p>
+                <Link
+                  to="/addresses"
+                  className="mt-3 inline-block rounded-lg bg-app-green px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Add an Address
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {addresses.map((address) => {
+                  const isSelected = selectedAddress === address._id;
+                  return (
+                    <button
+                      key={address._id}
+                      type="button"
+                      onClick={() => setSelectedAddress(address._id)}
+                      className={`relative rounded-xl border p-4 text-left transition ${
+                        isSelected
+                          ? "border-app-green bg-app-cream"
+                          : "border-app-border hover:border-app-green/50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-app-green">{address.label}</span>
+                        {isSelected && <Check className="size-4 text-app-green" />}
+                      </div>
+                      <p className="mt-1 text-sm leading-5 text-app-text-light">
+                        {address.address}
+                        <br />
+                        {address.city} {address.state} {address.zip}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           <section className="space-y-4 rounded-2xl bg-white p-6">
@@ -155,12 +231,19 @@ export default function Checkout() {
             </div>
           </div>
 
+          {orderError && (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {orderError}
+            </p>
+          )}
+
           <button
             type="button"
-            onClick={handlePlaceOrder}
-            className="w-full rounded-xl bg-app-green px-6 py-3 text-sm font-semibold text-white transition hover:bg-app-green-light"
+            onClick={() => void handlePlaceOrder()}
+            disabled={placing || addressesLoading || !selectedAddress}
+            className="w-full rounded-xl bg-app-green px-6 py-3 text-sm font-semibold text-white transition hover:bg-app-green-light disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Place Order
+            {placing ? "Placing order..." : "Place Order"}
           </button>
         </aside>
       </div>

@@ -1,13 +1,76 @@
 import { ArrowLeft, Check, MapPin, Package, Phone, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { dummyDashboardOrdersData, statusColors } from "../assets/assets";
+import { statusColors } from "../assets/assets";
+import { fetchOrder } from "../lib/api";
+import type { Order } from "../types";
 import { formatDateTime, formatFullDate, formatPrice } from "../utils/format";
 
 const steps = ["Placed", "Confirmed", "Assigned", "Packed", "Out for Delivery", "Delivered"];
 
 export default function OrderTracking() {
   const { id } = useParams();
-  const order = dummyDashboardOrdersData.find((item) => item._id === id) ?? dummyDashboardOrdersData[0];
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      setError("Order not found.");
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    fetchOrder(id)
+      .then((data) => {
+        if (active) setOrder(data);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) return;
+        setOrder(null);
+        setError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load this order.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-[1280px] px-8 py-8">
+        <div className="h-12 w-64 animate-pulse rounded-lg bg-white/70" />
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_347px]">
+          <div className="h-96 animate-pulse rounded-2xl bg-white/70" />
+          <div className="h-72 animate-pulse rounded-2xl bg-white/70" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="mx-auto flex w-full max-w-[1280px] flex-col items-center gap-4 px-8 py-24 text-center">
+        <h1 className="text-2xl font-semibold text-app-green">Order unavailable</h1>
+        <p className="text-sm text-app-text-light">{error || "This order could not be found."}</p>
+        <Link
+          to="/orders"
+          className="mt-2 rounded-xl bg-app-orange px-6 py-3 text-sm font-semibold text-white hover:bg-app-orange-dark"
+        >
+          Back to Orders
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1280px] px-8 py-8">

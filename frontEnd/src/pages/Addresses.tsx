@@ -1,40 +1,107 @@
 import { MapPin, Plus, Star, Trash2, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { dummyAddressData } from "../assets/assets";
+import { api, fetchAddresses } from "../lib/api";
 import type { Address } from "../types";
 
 const emptyForm = { label: "", address: "", city: "", state: "", zip: "" };
 
 export default function Addresses() {
-  const [addresses, setAddresses] = useState<Address[]>(dummyAddressData);
+  const [addresses, setAddresses] = useState<Address[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState("");
 
-  function handleAdd(event: FormEvent) {
-    event.preventDefault();
-    const newAddress: Address = {
-      _id: Date.now().toString(),
-      ...form,
-      isDefault: addresses.length === 0,
-      lat: 40.7128,
-      lng: -74.006,
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    fetchAddresses(controller.signal)
+      .then((data) => {
+        if (active) setAddresses(data);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          return;
+        }
+        setError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load your addresses.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
     };
-    setAddresses((current) => [...current, newAddress]);
-    setForm(emptyForm);
-    setFormOpen(false);
-    toast.success("Address added");
+  }, []);
+
+  async function handleAdd(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+
+    try {
+      const data = await api.post<{ address: Address }>("/addresses", form);
+      setAddresses((current) =>
+        current.map((address) =>
+          data.address.isDefault ? { ...address, isDefault: false } : address,
+        ).concat(data.address),
+      );
+      setForm(emptyForm);
+      setFormOpen(false);
+      toast.success("Address added");
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to save this address.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete(id: string) {
-    setAddresses((current) => current.filter((address) => address._id !== id));
-    toast.success("Address removed");
+  async function handleDelete(id: string) {
+    setBusyId(id);
+    setError("");
+    try {
+      await api.delete(`/addresses/${id}`);
+      setAddresses(await fetchAddresses());
+      toast.success("Address removed");
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error ? deleteError.message : "Unable to delete this address.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setBusyId("");
+    }
   }
 
-  function handleSetDefault(id: string) {
-    setAddresses((current) =>
-      current.map((address) => ({ ...address, isDefault: address._id === id })),
-    );
+  async function handleSetDefault(id: string) {
+    setBusyId(id);
+    setError("");
+    try {
+      await api.patch(`/addresses/${id}/default`);
+      setAddresses((current) =>
+        current.map((address) => ({ ...address, isDefault: address._id === id })),
+      );
+      toast.success("Default address updated");
+    } catch (defaultError) {
+      const message =
+        defaultError instanceof Error
+          ? defaultError.message
+          : "Unable to update the default address.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setBusyId("");
+    }
   }
 
   return (
@@ -81,17 +148,35 @@ export default function Addresses() {
           <div className="flex items-end">
             <button
               type="submit"
-              className="w-full rounded-xl bg-app-orange px-6 py-2.5 text-sm font-semibold text-white hover:bg-app-orange-dark"
+              disabled={saving}
+              className="w-full rounded-xl bg-app-orange px-6 py-2.5 text-sm font-semibold text-white hover:bg-app-orange-dark disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Save Address
+              {saving ? "Saving..." : "Save Address"}
             </button>
           </div>
         </form>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {addresses.map((address) => (
-          <div key={address._id} className="flex flex-col gap-3 rounded-2xl bg-white p-5">
+      {error && (
+        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-44 animate-pulse rounded-2xl bg-white/70" />
+          ))}
+        </div>
+      ) : addresses.length === 0 ? (
+        <p className="rounded-2xl border border-app-border bg-white p-10 text-center text-sm text-app-text-light">
+          You have not saved any addresses yet.
+        </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {addresses.map((address) => (
+            <div key={address._id} className="flex flex-col gap-3 rounded-2xl bg-white p-5">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm font-semibold text-app-green">
                 <MapPin className="size-4" />
@@ -114,8 +199,9 @@ export default function Addresses() {
               {!address.isDefault && (
                 <button
                   type="button"
-                  onClick={() => handleSetDefault(address._id)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-app-text-light hover:text-app-green"
+                  disabled={busyId === address._id}
+                  onClick={() => void handleSetDefault(address._id)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-app-text-light hover:text-app-green disabled:opacity-50"
                 >
                   <Star className="size-3.5" />
                   Set as default
@@ -123,17 +209,19 @@ export default function Addresses() {
               )}
               <button
                 type="button"
-                onClick={() => handleDelete(address._id)}
+                disabled={busyId === address._id}
+                onClick={() => void handleDelete(address._id)}
                 aria-label={`Delete ${address.label} address`}
-                className="ml-auto flex items-center gap-1.5 text-xs font-medium text-app-text-light hover:text-app-error"
+                className="ml-auto flex items-center gap-1.5 text-xs font-medium text-app-text-light hover:text-app-error disabled:opacity-50"
               >
                 <Trash2 className="size-3.5" />
                 Delete
               </button>
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

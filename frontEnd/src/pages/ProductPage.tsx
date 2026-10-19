@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight, Check, Home, Minus, Plus, ShoppingCart } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ProductCard from "../components/ProductCard";
 import StarRating from "../components/StarRating";
 import DummyReviewsSection from "../assets/DummyReviewsSection";
-import { dummyProducts } from "../assets/assets";
+import { api, fetchProducts } from "../lib/api";
+import type { Product } from "../types";
 import { useCart } from "../context/useCart";
 import { formatPrice } from "../utils/format";
 
@@ -14,15 +15,97 @@ export default function ProductPage() {
   const navigate = useNavigate();
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [related, setRelated] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const product = dummyProducts.find((item) => item._id === id) ?? dummyProducts[0];
-  const related = dummyProducts
-    .filter((item) => item.category === product.category && item._id !== product._id)
-    .slice(0, 4);
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      setError("Product not found.");
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setLoading(true);
+    setError("");
+    setQuantity(1);
+
+    api
+      .get<{ product: Product }>(`/products/${id}`, controller.signal)
+      .then(async (data) => {
+        if (!active) return;
+        setProduct(data.product);
+        try {
+          const relatedData = await fetchProducts(
+            {
+              category: data.product.category,
+              excludeId: data.product._id,
+              limit: 4,
+            },
+            controller.signal,
+          );
+          if (active) setRelated(relatedData.products);
+        } catch {
+          if (active) setRelated([]);
+        }
+      })
+      .catch((fetchError: unknown) => {
+        if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+          return;
+        }
+        setProduct(null);
+        setError(
+          fetchError instanceof Error ? fetchError.message : "Unable to load this product.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [id]);
 
   function handleAddToCart() {
+    if (!product) return;
     addItem(product, quantity);
     toast.success(`${product.name} added to cart`);
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-[1280px] px-8 py-10">
+        <div className="grid animate-pulse gap-8 rounded-2xl bg-white p-8 lg:grid-cols-2">
+          <div className="h-96 rounded-xl bg-app-cream" />
+          <div className="space-y-4">
+            <div className="h-4 w-24 rounded bg-app-cream" />
+            <div className="h-8 w-2/3 rounded bg-app-cream" />
+            <div className="h-6 w-1/3 rounded bg-app-cream" />
+            <div className="h-24 rounded bg-app-cream" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="mx-auto flex w-full max-w-[1280px] flex-col items-center gap-4 px-8 py-24 text-center">
+        <h1 className="text-2xl font-semibold text-app-green">Product unavailable</h1>
+        <p className="text-sm text-app-text-light">{error || "This product could not be found."}</p>
+        <Link
+          to="/products"
+          className="mt-2 rounded-xl bg-app-orange px-6 py-3 text-sm font-semibold text-white hover:bg-app-orange-dark"
+        >
+          Browse Products
+        </Link>
+      </div>
+    );
   }
 
   return (

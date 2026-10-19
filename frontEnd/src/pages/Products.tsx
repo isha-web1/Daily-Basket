@@ -1,8 +1,10 @@
 import { Home } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
-import { categoriesData, dummyProducts } from "../assets/assets";
+import { categoriesData } from "../assets/assets";
+import { fetchProducts, type Pagination } from "../lib/api";
+import type { Product } from "../types";
 
 type SortOption = "newest" | "price-asc" | "price-desc" | "rating";
 
@@ -15,36 +17,81 @@ const sortLabels: Record<SortOption, string> = {
 
 export default function Products() {
   const [searchParams] = useSearchParams();
-  const initialCategory = searchParams.get("category") ?? "all";
+  const categoryParam = searchParams.get("category") ?? "all";
 
-  const [category, setCategory] = useState(initialCategory);
+  const [category, setCategory] = useState(categoryParam);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
+  const [page, setPage] = useState(1);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 12,
+    total: 0,
+    totalPages: 1,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const products = useMemo(() => {
-    const min = minPrice === "" ? 0 : Number(minPrice);
-    const max = maxPrice === "" ? Number.POSITIVE_INFINITY : Number(maxPrice);
+  useEffect(() => {
+    setCategory(categoryParam);
+    setPage(1);
+  }, [categoryParam]);
 
-    const filtered = dummyProducts.filter((product) => {
-      const matchesCategory = category === "all" || product.category === category;
-      const matchesPrice = product.price >= min && product.price <= max;
-      return matchesCategory && matchesPrice;
-    });
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
 
-    return [...filtered].sort((a, b) => {
-      switch (sort) {
-        case "price-asc":
-          return a.price - b.price;
-        case "price-desc":
-          return b.price - a.price;
-        case "rating":
-          return b.rating - a.rating;
-        default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-    });
-  }, [category, minPrice, maxPrice, sort]);
+      fetchProducts(
+        {
+          page,
+          limit: 12,
+          category: category === "all" ? undefined : category,
+          minPrice: minPrice === "" ? undefined : Number(minPrice),
+          maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
+          sort,
+        },
+        controller.signal,
+      )
+        .then((data) => {
+          if (!active) return;
+          setProducts(data.products);
+          setPagination(data.pagination);
+        })
+        .catch((fetchError: unknown) => {
+          if (!active || (fetchError instanceof DOMException && fetchError.name === "AbortError")) {
+            return;
+          }
+          setError(
+            fetchError instanceof Error ? fetchError.message : "Unable to load products.",
+          );
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [category, minPrice, maxPrice, sort, page, reloadKey]);
+
+  function updateCategory(value: string) {
+    setCategory(value);
+    setPage(1);
+  }
+
+  function updateSort(value: SortOption) {
+    setSort(value);
+    setPage(1);
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1280px] px-8 py-6">
@@ -64,7 +111,7 @@ export default function Products() {
               <div className="space-y-1.5">
                 <button
                   type="button"
-                  onClick={() => setCategory("all")}
+                  onClick={() => updateCategory("all")}
                   className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                     category === "all"
                       ? "bg-app-green font-medium text-white"
@@ -77,7 +124,7 @@ export default function Products() {
                   <button
                     key={item.slug}
                     type="button"
-                    onClick={() => setCategory(item.slug)}
+                    onClick={() => updateCategory(item.slug)}
                     className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                       category === item.slug
                         ? "bg-app-green font-medium text-white"
@@ -97,7 +144,10 @@ export default function Products() {
                   type="number"
                   min={0}
                   value={minPrice}
-                  onChange={(event) => setMinPrice(event.target.value)}
+                  onChange={(event) => {
+                    setMinPrice(event.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Min"
                   className="h-[38px] w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-green placeholder:text-app-text-light"
                 />
@@ -106,7 +156,10 @@ export default function Products() {
                   type="number"
                   min={0}
                   value={maxPrice}
-                  onChange={(event) => setMaxPrice(event.target.value)}
+                  onChange={(event) => {
+                    setMaxPrice(event.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Max"
                   className="h-[38px] w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-green placeholder:text-app-text-light"
                 />
@@ -119,14 +172,16 @@ export default function Products() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="space-y-0.5">
               <h1 className="text-2xl font-semibold text-app-green">All Products</h1>
-              <p className="text-sm text-app-text-light">{products.length} products found</p>
+              <p className="text-sm text-app-text-light">
+                {loading ? "Loading products..." : `${pagination.total} products found`}
+              </p>
             </div>
 
             <label className="flex items-center gap-2 rounded-xl border border-app-border bg-white px-4 py-2 text-sm text-app-green">
               <span className="sr-only">Sort products</span>
               <select
                 value={sort}
-                onChange={(event) => setSort(event.target.value as SortOption)}
+                onChange={(event) => updateSort(event.target.value as SortOption)}
                 className="cursor-pointer bg-transparent text-sm text-app-green focus:outline-none"
               >
                 {Object.entries(sortLabels).map(([value, label]) => (
@@ -138,16 +193,61 @@ export default function Products() {
             </label>
           </div>
 
-          {products.length === 0 ? (
+          {error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+              <p className="text-sm text-red-700">{error}</p>
+              <button
+                type="button"
+                onClick={() => setReloadKey((key) => key + 1)}
+                className="mt-3 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-app-green shadow-sm"
+              >
+                Try again
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div key={index} className="h-72 animate-pulse rounded-2xl bg-white/70" />
+              ))}
+            </div>
+          ) : products.length === 0 ? (
             <p className="rounded-2xl border border-app-border bg-white p-10 text-center text-sm text-app-text-light">
               No products match your filters.
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard key={product._id} product={product} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+                {products.map((product) => (
+                  <ProductCard key={product._id} product={product} />
+                ))}
+              </div>
+
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    className="rounded-lg border border-app-border bg-white px-4 py-2 text-sm font-medium text-app-green disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-app-text-light">
+                    Page {page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={page >= pagination.totalPages}
+                    onClick={() =>
+                      setPage((current) => Math.min(pagination.totalPages, current + 1))
+                    }
+                    className="rounded-lg border border-app-border bg-white px-4 py-2 text-sm font-medium text-app-green disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
